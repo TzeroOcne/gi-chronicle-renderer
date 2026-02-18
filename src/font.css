@@ -1,0 +1,10 @@
+@font-face {
+  font-family: "Genshin";
+  src: url("/src/assets/fonts/genshin.woff2") format("woff2");
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-genshin: "Genshin", sans-serif;
+}

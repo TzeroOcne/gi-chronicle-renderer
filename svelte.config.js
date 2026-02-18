@@ -1,9 +1,10 @@
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
-export default {
-  // Consult https://svelte.dev/docs#compile-time-svelte-preprocess
-  // for more information about preprocessors
+/** @type {import('@sveltejs/vite-plugin-svelte').SvelteConfig} */
+const config = {
   preprocess: vitePreprocess({
     script: true,
   }),
 };
+
+export default config;

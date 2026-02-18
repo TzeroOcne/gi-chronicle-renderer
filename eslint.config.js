@@ -51,7 +51,14 @@ const svelteRules = {
 };
 
 export default [
-  {languageOptions: { globals: globals.browser }},
+  {
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        chrome: 'readonly',
+      },
+    },
+  },
   {
     rules: {
       ...pluginJs.configs.recommended.rules,
