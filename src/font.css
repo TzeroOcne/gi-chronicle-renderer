@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Genshin";
-  src: url("/src/assets/fonts/genshin.woff2") format("woff2");
+  src: url(https://act-webstatic.hoyoverse.com/font_generate/m11241040191111_bbs_oversea_en-us_l0z6yx.woff2) format("woff2");
   font-style: normal;
   font-display: swap;
 }

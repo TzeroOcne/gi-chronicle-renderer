@@ -1,7 +1,39 @@
 <script lang="ts">
   import type { ChallengeDetail, StygianOnslaughtDetail } from '$/genshin';
-  import { cn } from '@/lib/tailwind';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
+  import { Icon } from 'svelte-icons-pack';
+  import { FaSolidCameraRetro } from 'svelte-icons-pack/fa';
+  import bg5 from '@/assets/bg-5-star-raw.png';
+  import bg4 from '@/assets/bg-4-star-raw.png';
+  import { flattenSVG, toBase64 } from '@/lib/images';
+
+  const bgMap:Record<number, string> = $state({
+    5: '',
+    4: '',
+  });
+
+  const elementIcons:Record<string, string> = $state(Object.fromEntries(
+    Object.entries(
+      import.meta.glob<true, string, string>('@/assets/icons/elements/*.png', {
+        eager: true,
+        import: 'default',
+      }),
+    ).map(([path, module]) => {
+      const name = path.split('/').pop()!
+        .replace('.png', '')
+        .toLowerCase();
+      return [name, module];
+    }),
+  ));
+  $effect(() => {
+    (async () => {
+      bgMap[5] = await toBase64(bg5);
+      bgMap[4] = await toBase64(bg4);
+      await Promise.all(Object.entries(elementIcons).map(async ([name, src]) => {
+        elementIcons[name] = await toBase64(src);
+      }));
+    })();
+  });
 
   type Props = {
     data: StygianOnslaughtDetail;
@@ -29,126 +61,165 @@
     untrack(() => mainImageFGOptions.map(() => true)),
   );
 
-  const elementIcons:Record<string, string> = Object.fromEntries(
-    Object.entries(
-      import.meta.glob<true, string, string>('@/assets/icons/elements/*.png', {
-        eager: true,
-        import: 'default',
-      }),
-    ).map(([path, module]) => {
-      const name = path.split('/').pop()!
-        .replace('.png', '')
-        .toLowerCase();
-      return [name, module];
-    }),
-  );
-
-  const charImage:Record<string, string> = {};
+  const charImageMap:Record<string, string> = {};
   async function getCharImage(name: string) {
-    if (charImage[name]) return charImage[name];
+    if (charImageMap[name]) return charImageMap[name];
     const module = await import(`@/assets/characters/fg-profile/${name}.webp`);
-    charImage[name] = module.default;
-    return charImage[name];
+    charImageMap[name] = await toBase64(module.default);
+    return charImageMap[name];
   }
 
   const charCard:Record<string, string> = {};
   async function getCharCard(name: string) {
     if (charCard[name]) return charCard[name];
     const module = await import(`@/assets/characters/card/${name}.webp`);
-    charCard[name] = module.default;
+    charCard[name] = await toBase64(module.default);
     return charCard[name];
   }
+
+  async function loadAndMeasure(src: string) {
+    const img = new Image();
+    img.src = src;
+    await img.decode();
+    return {
+      ratio: img.naturalWidth / img.naturalHeight,
+    };
+  }
+
+  let svgElement = $state<SVGSVGElement>();
+  let rendering = $state(false);
+  async function render() {
+    try {
+      // console.log(Array.from(svgElement.querySelectorAll('image'))
+      //   .map((img) => img.href.baseVal)
+      //   .filter((src) => src.startsWith('http')),
+      // );
+      console.log(svgElement.toString());
+      const png = await flattenSVG(svgElement, 1);
+      const a = document.createElement('a');
+      a.href = png;
+      a.download = 'stygian-challenge.png';
+      a.click();
+    } finally {
+      rendering = false;
+    }
+  }
+  async function startRender() {
+    // rendering = true;
+    // await tick();
+    await render();
+  }
 </script>
+
+{#snippet cardImage(cardUrl: string, bgFillToggle: boolean)}
+  <image href={cardUrl} x="0" y="0" width="640" height="1200" preserveAspectRatio={bgFillToggle ? 'xMidYMid slice' : 'xMidYMid meet'} style="filter: brightness(0.5);" />
+{/snippet}
+
+{#snippet charImage(charUrl: string, offsetX: number, renderedWidth: number)}
+  <image
+    href={charUrl}
+    x={offsetX}
+    y="0"
+    width={renderedWidth}
+    height="1200"
+  />
+{/snippet}
 
 {#snippet challenge(challengeDetail: ChallengeDetail, idx: number)}
   {@const mainImage = mainImageList[idx]}
   {@const bgImage = bgImageList[idx]}
   {@const bgToggle = bgImageToggle[idx]}
   {@const bgFillToggle = bgImageFillToggle[idx]}
-  <div class="odd:bg-slate-500 relative flex flex-col h-full min-h-0">
-    <!-- <div class="p-4 h-16 box-border font-genshin leading-4 text-white bg-gray-900"> -->
-    <div class="h-16 flex-none box-border font-genshin bg-gray-900">
-      <div>
-      </div>
-    </div>
-    <div class="grow min-h-0 relative">
-      <div class={cn(
-        'absolute w-full h-full overflow-clip',
-        {
-          'hidden': !bgToggle,
-        },
-      )}>
-        <div class="place-self-center">
-          {#if bgImage !== ''}
-            <img src={bgImage} alt=""
-              class={cn(
-                'object-cover brightness-50 mask-b-from-0% mask-b-to-80%',
-                {
-                  'w-full': bgFillToggle,
-                  'h-144': !bgFillToggle,
-                },
-              )}
-            >
-          {:else}
-            {#await getCharCard(mainImageFGOptions[idx]) then charCard}
-              <img src={charCard} alt=""
-                class={cn(
-                  'object-cover brightness-50',
-                  {
-                    'w-full': bgFillToggle,
-                    'h-144': !bgFillToggle,
-                  },
-                )}
-              >
+  {@const memberWidth = 128 * 108 / 128}
+  {@const memberHeight = (128 + 40) * 108 / 128}
+  {@const gap = 32}
+  {@const totalWidth = challengeDetail.teams.length * memberWidth + (challengeDetail.teams.length - 1) * gap}
+  {@const startX = (640 - totalWidth) / 2} <!-- assuming the container width is 640 -->
+  {#if bgToggle}
+    {#if bgImage !== ''}
+      <image href={bgImage} x="0" y="0" width="640" height="1200" preserveAspectRatio={bgFillToggle ? 'xMidYMid slice' : 'xMidYMid meet'} style="filter: brightness(0.5);" />
+    {:else}
+      {#await getCharCard(mainImageFGOptions[idx]) then charCard}
+        {#if rendering}
+          {#await toBase64(charCard) then cardUrl}
+            {@render cardImage(cardUrl, bgFillToggle)}
+          {/await}
+        {:else}
+          {@render cardImage(charCard, bgFillToggle)}
+        {/if}
+      {/await}
+    {/if}
+  {/if}
+  {#if mainImage !== ''}
+    <image href={mainImage}
+      x="0" y="0"
+      width="640"
+      height="1200"
+      preserveAspectRatio="xMidYMid meet"
+    />
+  {:else}
+    {#await getCharImage(mainImageFGOptions[idx]) then charImg}
+      {#await loadAndMeasure(charImg) then size}
+        <defs>
+          <clipPath id={`mainClip-${idx}`}>
+            <rect x="0" y="0" width="640" height="1200" />
+          </clipPath>
+        </defs>
+        {@const renderedWidth = 1200 * size.ratio}
+        {@const offsetX = (640 - renderedWidth) / 2}
+        <g clip-path={`url(#mainClip-${idx})`}>
+          {#if rendering}
+            {#await toBase64(charImg) then charUrl}
+              {@render charImage(charUrl, offsetX, renderedWidth)}
             {/await}
-          {/if}
-        </div>
-      </div>
-      <div class="overflow-clip relative h-full">
-        <div class="place-self-center h-full">
-          {#if mainImage !== ''}
-            <img src={mainImage} alt="">
           {:else}
-            {#await getCharImage(mainImageFGOptions[idx]) then charImg}
-              <img src={charImg} alt=""
-                class="h-full w-auto object-cover"
-              >
-            {/await}
+            {@render charImage(charImg, offsetX, renderedWidth)}
           {/if}
-        </div>
-      </div>
-    </div>
-    <div class="w-full absolute bottom-0 py-8 bg-linear-to-t from-black via-black/75 to-white/0">
-      <div class="flex justify-between w-4/5 place-self-center">
-        {#each challengeDetail.teams as member}
-          <div
-            class="aspect-64/84 w-16 h-21 relative rounded-sm overflow-clip bg-[#ece5d8]"
-          >
-            <img src={member.image} alt={member.name}
-              class={cn(
-                'w-full block bg-cover',
-                {
-                  'bg-[url(@/assets/bg-5-star-raw.png)]': member.rarity === 5,
-                  'bg-[url(@/assets/bg-4-star-raw.png)]': member.rarity === 4,
-                },
-              )}
-            >
-            <div class="h-5 text-center text-black">
-              Lv. {member.level}
-            </div>
-            {#if member.rank > 0}
-              <div class="absolute right-0 top-0 w-4 text-center bg-black/64 text-white rounded-bl-sm">
-                {member.rank}
-              </div>
-            {/if}
-            <img src={elementIcons[member.element.toLowerCase()]} alt=""
-              class="absolute left-0 top-0 w-3 h-3 p-0.5"
-            >
-          </div>
-        {/each}
-      </div>
-    </div>
-  </div>
+        </g>
+      {/await}
+    {/await}
+  {/if}
+  <rect x="0" y="0" width="640" height="80" fill="#111827" />
+  <text
+    x="320"
+    y="40"
+    text-anchor="middle"
+    dominant-baseline="middle"
+    fill="white"
+    font-size="20"
+    font-family="Genshin"
+  >
+    {challengeDetail.name}
+  </text>
+  <defs>
+    <linearGradient id={`bottomFade-${idx}`} x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="black" />
+      <stop offset="30%" stop-color="black" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="800" width="640" height="400" fill={`url(#bottomFade-${idx})`} />
+  <g transform="translate(0, 960)">
+    {#each challengeDetail.teams as member, i}
+      <g transform={`translate(${startX + i * (memberWidth + gap)}, 0)`} clip-path={`url(#memberClip-${i})`}>
+        <clipPath id={`memberClip-${i}`}>
+          <rect width={memberWidth} height={memberHeight} rx={16 * 108 / 128} ry={16 * 108 / 128} />
+        </clipPath>
+        <rect width={memberWidth} height={128 * 108 / 128} rx={12 * 108 / 128} fill="#ece5d8" />
+        <image href={bgMap[member.rarity]} x="0" y="0" width={memberWidth} height={128 * 108 / 128} preserveAspectRatio="xMidYMid slice" />
+        {#await toBase64(member.image) then memberImage}
+          <image href={memberImage} x="0" y="0" width={memberWidth} height={128 * 108 / 128} preserveAspectRatio="xMidYMid slice" />
+        {/await}
+        <rect x="0" y={128 * 108 / 128} width={memberWidth} height={40 * 108 / 128} fill="#ece5d8" />
+        <text x={memberWidth / 2} y={(128 + 30) * 108 / 128} text-anchor="middle" font-size={24 * 108 / 128} fill="black">Lv. {member.level}</text>
+        {#if member.rank > 0}
+          <rect x={88 * 108 / 128} y="0" width={40 * 108 / 128} height={40 * 108 / 128} fill="black" opacity="0.64" rx={8 * 108 / 128} />
+          <text x={108 * 108 / 128} y={28 * 108 / 128} text-anchor="middle" font-size={24 * 108 / 128} fill="white">{member.rank}</text>
+        {/if}
+        <image href={elementIcons[member.element.toLowerCase()]} x={8 * 108 / 128} y={8 * 108 / 128} width={32 * 108 / 128} height={32 * 108 / 128} />
+      </g>
+    {/each}
+  </g>
 {/snippet}
 
 <div class="flex">
@@ -202,10 +273,22 @@
         </div>
       {/each}
     </div>
+    <button class="btn btn-primary mt-8"
+      onclick={startRender}
+    >
+      <Icon src={FaSolidCameraRetro}/>
+    </button>
   </div>
-  <div class="grid grid-cols-3 aspect-16/10 w-4/5 overflow-y-clip">
+  <svg
+    bind:this={svgElement}
+    viewBox="0 0 1920 1200"
+    class="w-4/5 aspect-16/10"
+    preserveAspectRatio="xMidYMid meet"
+  >
     {#each data.single.challenge as item, idx}
-      {@render challenge(item, idx)}
+      <g transform={`translate(${idx * 640}, 0)`}>
+        {@render challenge(item, idx)}
+      </g>
     {/each}
-  </div>
+  </svg>
 </div>
