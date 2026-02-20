@@ -25,6 +25,8 @@
     "eslint": "^9.39.2",
     "eslint-plugin-svelte": "^3.14.0",
     "globals": "^17.1.0",
+    "html-to-image": "^1.11.13",
+    "html2canvas-pro": "^1.6.7",
     "svelte": "^5.48.3",
     "svelte-check": "^4.3.5",
     "svelte-eslint-parser": "^1.4.1",

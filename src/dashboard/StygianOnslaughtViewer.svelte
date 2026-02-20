@@ -1,7 +1,12 @@
 <script lang="ts">
   import type { ChallengeDetail, StygianOnslaughtDetail } from '$/genshin';
   import { cn } from '@/lib/tailwind';
+  import { formatDate } from '@/lib/datetime';
   import { untrack } from 'svelte';
+  import { Icon } from 'svelte-icons-pack';
+  import { FaSolidCameraRetro, FaSolidDownload } from 'svelte-icons-pack/fa';
+  import Team from './Team.svelte';
+  import { toPng } from 'html-to-image';
 
   type Props = {
     data: StygianOnslaughtDetail;
@@ -11,6 +16,8 @@
     data,
     idx: dataIdx,
   }:Props = $props();
+  let showTitle = $state(false);
+  let selectedView = $state<'preview' | 'result'>('preview');
   let mainImageFGOptions = $state(
     untrack(() => data
       .single.challenge.map((challenge) => challenge.teams[0].name),
@@ -29,20 +36,6 @@
     untrack(() => mainImageFGOptions.map(() => true)),
   );
 
-  const elementIcons:Record<string, string> = Object.fromEntries(
-    Object.entries(
-      import.meta.glob<true, string, string>('@/assets/icons/elements/*.png', {
-        eager: true,
-        import: 'default',
-      }),
-    ).map(([path, module]) => {
-      const name = path.split('/').pop()!
-        .replace('.png', '')
-        .toLowerCase();
-      return [name, module];
-    }),
-  );
-
   const charImage:Record<string, string> = {};
   async function getCharImage(name: string) {
     if (charImage[name]) return charImage[name];
@@ -58,52 +51,103 @@
     charCard[name] = module.default;
     return charCard[name];
   }
+
+  let renderTarget = $state<HTMLElement>();
+  let resultUrl = $state('');
+  let rendering = $state(false);
+  async function render() {
+    rendering = true;
+    selectedView = 'result';
+
+    const targetWidth = 1920;
+    const targetHeight = 1200;
+
+    const rect = renderTarget.getBoundingClientRect();
+    const elementWidth = rect.width;
+    const elementHeight = rect.height;
+
+    const scaleX = targetWidth / elementWidth;
+    const scaleY = targetHeight / elementHeight;
+
+    // choose behavior
+    const scale = Math.min(scaleX, scaleY); // fit
+    // const scale = Math.max(scaleX, scaleY); // fill
+
+    const dataUrl = await toPng(renderTarget, {
+      width: elementWidth,
+      height: elementHeight,
+      pixelRatio: scale,     // equivalent to html2canvas scale
+      cacheBust: true,       // helps avoid cached asset issues
+    });
+
+    rendering = false;
+    resultUrl = dataUrl;
+  }
+
+  async function download() {
+    const a = document.createElement('a');
+    a.href = resultUrl;
+    a.download = `GI-SO-${formatDate(new Date(), 'YYYY-MM-DDTHH-mm-ss')}.png`;
+    a.click();
+  }
 </script>
 
+{#snippet background(bgImage: string, bgToggle: boolean, bgFillToggle: boolean, idx: number)}
+  <div class={cn(
+    'absolute w-full h-full overflow-clip',
+    {
+      'hidden': !bgToggle,
+    },
+  )}>
+    <div class="place-self-center">
+      {#if bgImage !== ''}
+        <img src={bgImage} alt=""
+          class={cn(
+            'object-cover brightness-50 mask-b-from-0% mask-b-to-80%',
+            {
+              'w-full': bgFillToggle,
+              'h-full': !bgFillToggle,
+            },
+          )}
+        >
+      {:else}
+        {#await getCharCard(mainImageFGOptions[idx]) then charCard}
+          <img src={charCard} alt=""
+            class={cn(
+              'object-cover',
+              {
+                'w-full': bgFillToggle,
+                'h-full': !bgFillToggle,
+              },
+            )}
+          >
+        {/await}
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
+<!-- <div class="p-4 h-16 box-border font-genshin leading-4 text-white bg-gray-900"> -->
 {#snippet challenge(challengeDetail: ChallengeDetail, idx: number)}
   {@const mainImage = mainImageList[idx]}
   {@const bgImage = bgImageList[idx]}
   {@const bgToggle = bgImageToggle[idx]}
   {@const bgFillToggle = bgImageFillToggle[idx]}
-  <div class="odd:bg-slate-500 relative flex flex-col h-full min-h-0">
-    <!-- <div class="p-4 h-16 box-border font-genshin leading-4 text-white bg-gray-900"> -->
-    <div class="h-16 flex-none box-border font-genshin bg-gray-900">
-      <div>
+  <!-- <div class="odd:bg-slate-500 relative flex flex-col h-full min-h-0"> -->
+  <!-- </div> -->
+  <div class="aspect-16/30 flex flex-col h-full w-full min-h-0">
+    <div class={cn(
+      'h-1/10 px-[7%] content-center flex-none box-border font-genshin bg-gray-900',
+      {
+        'hidden': !showTitle,
+      },
+    )}>
+      <div class="text-[65%]">
+        {challengeDetail.name}
       </div>
     </div>
     <div class="grow min-h-0 relative">
-      <div class={cn(
-        'absolute w-full h-full overflow-clip',
-        {
-          'hidden': !bgToggle,
-        },
-      )}>
-        <div class="place-self-center">
-          {#if bgImage !== ''}
-            <img src={bgImage} alt=""
-              class={cn(
-                'object-cover brightness-50 mask-b-from-0% mask-b-to-80%',
-                {
-                  'w-full': bgFillToggle,
-                  'h-144': !bgFillToggle,
-                },
-              )}
-            >
-          {:else}
-            {#await getCharCard(mainImageFGOptions[idx]) then charCard}
-              <img src={charCard} alt=""
-                class={cn(
-                  'object-cover brightness-50',
-                  {
-                    'w-full': bgFillToggle,
-                    'h-144': !bgFillToggle,
-                  },
-                )}
-              >
-            {/await}
-          {/if}
-        </div>
-      </div>
+      {@render background(bgImage, bgToggle, bgFillToggle, idx)}
       <div class="overflow-clip relative h-full">
         <div class="place-self-center h-full">
           {#if mainImage !== ''}
@@ -111,48 +155,28 @@
           {:else}
             {#await getCharImage(mainImageFGOptions[idx]) then charImg}
               <img src={charImg} alt=""
-                class="h-full w-auto object-cover"
+                class="h-full w-auto object-cover bg-black/60"
               >
             {/await}
           {/if}
         </div>
       </div>
-    </div>
-    <div class="w-full absolute bottom-0 py-8 bg-linear-to-t from-black via-black/75 to-white/0">
-      <div class="flex justify-between w-4/5 place-self-center">
-        {#each challengeDetail.teams as member}
-          <div
-            class="aspect-64/84 w-16 h-21 relative rounded-sm overflow-clip bg-[#ece5d8]"
-          >
-            <img src={member.image} alt={member.name}
-              class={cn(
-                'w-full block bg-cover',
-                {
-                  'bg-[url(@/assets/bg-5-star-raw.png)]': member.rarity === 5,
-                  'bg-[url(@/assets/bg-4-star-raw.png)]': member.rarity === 4,
-                },
-              )}
-            >
-            <div class="h-5 text-center text-black">
-              Lv. {member.level}
-            </div>
-            {#if member.rank > 0}
-              <div class="absolute right-0 top-0 w-4 text-center bg-black/64 text-white rounded-bl-sm">
-                {member.rank}
-              </div>
-            {/if}
-            <img src={elementIcons[member.element.toLowerCase()]} alt=""
-              class="absolute left-0 top-0 w-3 h-3 p-0.5"
-            >
-          </div>
-        {/each}
-      </div>
+      <Team teams={challengeDetail.teams}/>
     </div>
   </div>
 {/snippet}
 
-<div class="flex">
-  <div class="w-1/5 box-border px-4">
+<div class="flex h-full w-full">
+  <div class="w-2/7 box-border px-4">
+    <fieldset class="fieldset rounded-lg bg-base-200">
+      <legend class="leading-0.5"><h2>Settings</h2></legend>
+      <label>
+        <div class="font-genshin">
+          Show Title
+        </div>
+        <input type="checkbox" class="toggle" bind:checked={showTitle}>
+      </label>
+    </fieldset>
     <div class="tabs tabs-lift">
       {#each mainImageList as _, idx}
         {@const teams = data.single.challenge[idx].teams}
@@ -202,10 +226,60 @@
         </div>
       {/each}
     </div>
+    <button class="mt-4 btn btn-primary"
+      onclick={render}
+    >
+      <Icon src={FaSolidCameraRetro}/>
+    </button>
   </div>
-  <div class="grid grid-cols-3 aspect-16/10 w-4/5 overflow-y-clip">
-    {#each data.single.challenge as item, idx}
-      {@render challenge(item, idx)}
-    {/each}
+  <div class="w-1/14"></div>
+  <div class="w-4/7 content-center">
+    <div class="tabs tabs-border w-full">
+      <input type="radio" name={`challenge-${dataIdx}`} class="tab" aria-label="Preview" checked
+        value="preview"
+        bind:group={selectedView}
+      >
+      <div class="tab-content ">
+        <div
+          bind:this={renderTarget}
+          class="grid grid-cols-3 aspect-16/10 overflow-y-clip"
+        >
+          {#each data.single.challenge as item, idx}
+            {@render challenge(item, idx)}
+          {/each}
+        </div>
+      </div>
+
+      <input type="radio" name={`challenge-${dataIdx}`} class="tab" aria-label="Result"
+        value="result"
+        bind:group={selectedView}
+      >
+      <div class="tab-content">
+        <div class="aspect-16/10 w-full relative">
+          <span class={cn(
+            'loading loading-spinner loading-xl',
+            {
+              'hidden': !rendering,
+            },
+          )}></span>
+          <img
+            class={cn(
+              'w-full',
+              {
+                'hidden!': resultUrl === '' || rendering,
+              },
+            )}
+            src={resultUrl}
+            alt="result"
+          >
+          <button class="btn btn-primary absolute bottom-4 right-4"
+            onclick={download}
+          >
+            <Icon src={FaSolidDownload}/>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
+  <div class="w-1/14"></div>
 </div>
