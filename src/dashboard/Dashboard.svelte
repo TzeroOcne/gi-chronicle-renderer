@@ -4,14 +4,16 @@
   import { StygianOnslaughtExample } from '@/example/data';
 
   let data = $state<StygianOnslaughtDetail[]>(StygianOnslaughtExample);
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === 'DASHBOARD_DATA') {
-      data = message.payload?.data?.data?.data ?? [];
-    }
-  });
+  if (chrome?.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === 'DASHBOARD_DATA') {
+        data = message.payload?.data?.data?.data ?? [];
+      }
+    });
+  }
 </script>
 
-<div class="w-full h-3/5 place-ci-center">
+<div class="w-full h-full place-ci-center">
   {#if data.length > 0}
     {#each data as item, idx}
       <StygianOnslaughtViewer {idx} data={item}/>

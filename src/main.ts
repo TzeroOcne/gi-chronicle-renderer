@@ -1,6 +1,7 @@
-import App from './App.svelte';
 import { mount } from 'svelte';
+import Dashboard from './dashboard/Dashboard.svelte';
+import './app.css';
 
-const app = mount(App, { target: document.getElementById('app')! });
+const app = mount(Dashboard, { target: document.getElementById('app')! });
 
 export default app;

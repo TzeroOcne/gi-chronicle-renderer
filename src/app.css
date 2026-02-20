@@ -1,6 +1,10 @@
-@import "tailwindcss";
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+/* @import "tailwindcss/preflight.css" layer(base); */
+@import "tailwindcss/utilities.css" layer(utilities);
 
 @import './nnry.css';
+@import './font.css';
 
 @utility preview {
   background-image:
@@ -19,4 +23,12 @@
 
 html, body, #app {
   @apply h-full;
+}
+
+body {
+  @apply m-0 p-0;
+}
+
+img {
+  display: block;
 }
